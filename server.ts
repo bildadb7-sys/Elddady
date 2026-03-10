@@ -16,8 +16,8 @@ import model from 'wink-eng-lite-web-model';
 
 const PORT = 5000;
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-const SUPABASE_URL = process.env.VITE_APP_SUPABASE_URL || '';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_APP_ANON_KEY || ''; 
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_APP_SUPABASE_URL || 'https://yssenbdybuxoujfsuyjv.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_APP_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlzc2VuYmR5YnV4b3VqZnN1eWp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5MzAyNDcsImV4cCI6MjA4NzUwNjI0N30.7STUrJ4gGYH_IGiHx0syiEIUDsZ0u1Xd8BFMW5ux7Cc'; 
 
 const app = express();
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
