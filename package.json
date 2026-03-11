@@ -4,12 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "start": "tsx server.ts",
+    "start": "tsx server-universal.ts",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "server": "tsx server.ts"
+    "server": "tsx server.ts",
+    "vercel-build": "vite build",
+    "postbuild": "cp server-universal.ts api/index.js"
   },
   "dependencies": {
     "@refinedev/core": "^5.0.9",
