@@ -22,6 +22,20 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              // Split large vendor libraries
+              'supabase': ['@supabase/supabase-js'],
+              'refined': ['@refinedev/core', '@refinedev/react-router', '@refinedev/supabase'],
+              'react-vendor': ['react', 'react-dom'],
+              'utils': ['bcryptjs', 'crypto', 'cors']
+            }
+          }
+        },
+        chunkSizeWarningLimit: 1000 // Increase warning limit to 1MB
       }
     };
 });
