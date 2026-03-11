@@ -63,124 +63,43 @@ const fetchWithAuth = async (endpoint: string, options: any = {}) => {
     return res.json();
 };
 
-// Test Supabase Realtime connection
-export const testRealtimeConnection = async () => {
-    console.log('🔍 Testing Supabase Realtime connection...');
-    console.log('🔗 Supabase URL:', import.meta.env?.VITE_APP_SUPABASE_URL || 'https://yssenbdybuxoujfsuyjv.supabase.co');
-    
-    try {
-        // Test basic auth
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        console.log('👤 Auth user:', user?.id || 'Not authenticated');
-        if (authError) console.error('❌ Auth error:', authError);
-        
-        // Test basic database connection
-        const { data: testData, error: dbError } = await supabase
-            .from('profiles')
-            .select('id, name')
-            .limit(1);
-            
-        if (dbError) {
-            console.error('❌ Database connection error:', dbError);
-        } else {
-            console.log('✅ Database connection working');
-        }
-        
-        // Test realtime connection with postgres_changes
-        const testChannel = supabase.channel('test-messages-realtime')
-            .on(
-                'postgres_changes', 
-                { event: 'INSERT', schema: 'public', table: 'messages' }, 
-                (payload) => {
-                    console.log('� Realtime message received:', payload);
-                }
-            )
-            .subscribe((status) => {
-                console.log('📊 Realtime subscription status:', status);
-                if (status === 'SUBSCRIBED') {
-                    console.log('✅ Realtime is working!');
-                } else if (status === 'CHANNEL_ERROR') {
-                    console.error('❌ Realtime channel error');
-                }
-            });
-            
-        console.log('🚀 Test channel created:', testChannel);
-        
-        // Clean up after 10 seconds
-        setTimeout(() => {
-            supabase.removeChannel(testChannel);
-            console.log('🧹 Test channel cleaned up');
-        }, 10000);
-        
-        return { success: true, user: user?.id };
-    } catch (error) {
-        console.error('❌ Realtime connection test failed:', error);
-        return { success: false, error };
-    }
-};
-
-// Test function to manually verify realtime messaging
-export const testRealtimeMessaging = async (conversationId: string) => {
-    console.log('🧪 Testing realtime messaging for conversation:', conversationId);
-    
-    try {
-        // 1. Subscribe to messages first
-        const testChannel = supabase
-            .channel(`messages:${conversationId}`)
-            .on(
-                'postgres_changes', 
-                { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` }, 
-                (payload) => {
-                    console.log('🎯 TEST: Received realtime message:', payload);
-                }
-            )
-            .subscribe((status) => {
-                console.log('📊 TEST: Subscription status:', status);
-            });
-        
-        // 2. Wait a moment then send a test message
-        setTimeout(async () => {
-            try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    console.log('🧪 Sending test message...');
-                    const { error } = await supabase.from('messages').insert({
-                        conversation_id: conversationId,
-                        sender_id: user.id,
-                        content: '🧪 Test message for realtime',
-                        is_system: false
-                    });
-                    
-                    if (error) {
-                        console.error('❌ TEST: Failed to send test message:', error);
-                    } else {
-                        console.log('✅ TEST: Test message sent successfully');
-                    }
-                }
-            } catch (e) {
-                console.error('❌ TEST: Error sending test message:', e);
-            }
-            
-            // Clean up after 5 seconds
-            setTimeout(() => {
-                supabase.removeChannel(testChannel);
-                console.log('🧹 TEST: Cleanup complete');
-            }, 5000);
-        }, 2000);
-        
-    } catch (error) {
-        console.error('❌ TEST: Realtime messaging test failed:', error);
-    }
-};
-
 export const api = {
     signup: async (formData: any) => {
+        const firstName = formData.firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const lastName = formData.secondName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        
+        let handle = `@${firstName}${lastName}`;
+        
+        // Check Tier 1
+        let { data: existing } = await supabase.from('profiles').select('id').eq('handle', handle).maybeSingle();
+        
+        if (existing) {
+            // Tier 2
+            handle = `@${firstName}_${lastName}`;
+            let { data: existing2 } = await supabase.from('profiles').select('id').eq('handle', handle).maybeSingle();
+            
+            if (existing2) {
+                // Tier 3
+                const chars = '0123456789abcdefghijklmnopqrstuvwxyz';
+                let isUnique = false;
+                while (!isUnique) {
+                    const randomSuffix = chars[Math.floor(Math.random() * 36)] + chars[Math.floor(Math.random() * 36)];
+                    handle = `@${firstName}_${lastName}_${randomSuffix}`;
+                    let { data: existing3 } = await supabase.from('profiles').select('id').eq('handle', handle).maybeSingle();
+                    if (!existing3) {
+                        isUnique = true;
+                    }
+                }
+            }
+        }
+
         const { data, error } = await supabase.auth.signUp({
             email: formData.email,
             password: formData.password,
             options: {
                 data: {
                     name: `${formData.firstName} ${formData.secondName}`,
+                    handle: handle,
                     mobile: formData.mobile,
                     country: formData.country,
                     gender: formData.gender,
@@ -1065,15 +984,9 @@ export const api = {
     },
     
     sendMessage: async (conversationId: string, content: string, replyToId?: string, image?: string) => {
-        console.log('📤 Sending message:', { conversationId, content, replyToId, image: !!image });
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        if (!user) {
-            console.error('❌ Not authenticated:', userError);
-            throw new Error("Not authenticated");
-        }
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Not authenticated");
         
-        console.log('👤 Authenticated user:', user.id);
-
         let imageUrl = null;
         if (image) {
             const fileName = `chat-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -1086,34 +999,19 @@ export const api = {
             }
         }
 
-        const messageData = {
+        const { error } = await supabase.from('messages').insert({
             conversation_id: conversationId,
             sender_id: user.id,
             content,
             image_url: imageUrl,
             reply_to_id: replyToId
-        };
-        
-        console.log('💾 Inserting message data:', messageData);
+        });
 
-        const { error: insertError } = await supabase.from('messages').insert(messageData);
+        if (error) throw error;
 
-        if (insertError) {
-            console.error('❌ Message insert error:', insertError);
-            throw insertError;
-        }
-        
-        console.log('✅ Message inserted successfully');
-
-        const { error: updateError } = await supabase.from('conversations')
+        await supabase.from('conversations')
             .update({ last_message_at: new Date().toISOString() })
             .eq('id', conversationId);
-            
-        if (updateError) {
-            console.error('❌ Conversation update error:', updateError);
-        } else {
-            console.log('✅ Conversation updated successfully');
-        }
             
         // Optimistic read for sender
         api.markConversationAsRead(conversationId);
@@ -1130,20 +1028,17 @@ export const api = {
     },
 
     subscribeToMessages: (conversationId: string, callback: (msg: Message) => void) => {
-        console.log(`🔔 Subscribing to messages for conversation: ${conversationId}`);
-        
-        const channel = supabase
-            .channel(`messages:${conversationId}`)
+        return supabase
+            .channel(`public:messages:conversation_id=eq.${conversationId}`)
             .on(
                 'postgres_changes', 
                 { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` }, 
                 async (payload) => {
-                    console.log('📨 Received new message:', payload);
                     const msg = payload.new;
                     const { data: sender } = await supabase.from('profiles').select('*').eq('id', msg.sender_id).single();
                     const { data: { user } } = await supabase.auth.getUser();
 
-                    const formattedMsg = {
+                    callback({
                         id: msg.id,
                         senderId: msg.sender_id,
                         senderName: sender?.name,
@@ -1154,17 +1049,9 @@ export const api = {
                         isMe: user?.id === msg.sender_id,
                         isSystem: msg.is_system,
                         reactions: []
-                    };
-                    
-                    console.log('✨ Formatted message:', formattedMsg);
-                    callback(formattedMsg);
+                    });
             })
-            .subscribe((status) => {
-                console.log(`📡 Realtime subscription status for ${conversationId}:`, status);
-            });
-            
-        console.log('🚀 Channel created and subscribed:', channel);
-        return channel;
+            .subscribe();
     },
     
     startDirectMessage: async (targetUserId: string): Promise<Conversation> => {
